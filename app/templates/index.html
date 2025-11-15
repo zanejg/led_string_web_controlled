@@ -17,6 +17,19 @@
             max-width: 960px;
         }
     </style>
+
+    <script>
+        function controlLED(ledId) {
+            fetch(`/control_led/${ledId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(`LED ${ledId} control response:`, data);
+                })
+                .catch(error => {
+                    console.error('Error controlling LED:', error);
+                });
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -33,6 +46,13 @@
             </div>
             
             <!-- Add your LED controls here -->
+
+            <ul>
+                <li><button class="btn btn-primary" onclick="controlLED('heart')">Heart Beat</button></li>
+                <li><button class="btn btn-primary" onclick="controlLED('wave')">Wave Effect</button></li>
+                <li><button class="btn btn-primary" onclick="controlLED('flame')">Flame Effect</button></li>
+                <li><button class="btn btn-secondary" onclick="controlLED('stop')">Stop</button></li>
+            </ul>
             
         </main>
         

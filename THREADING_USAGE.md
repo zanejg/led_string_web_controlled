@@ -41,6 +41,12 @@ curl http://localhost:5000/control_led/wave
 # Start flame effect
 curl http://localhost:5000/control_led/flame
 
+# Start audio loudness effect (reacts to overall volume)
+curl http://localhost:5000/control_led/audio_loudness
+
+# Start audio frequency effect (reacts to different frequency bands)
+curl http://localhost:5000/control_led/audio_frequency
+
 # Stop current effect and turn off LEDs
 curl http://localhost:5000/control_led/stop
 ```
@@ -66,7 +72,7 @@ curl http://localhost:5000/api/effects
 # Response:
 {
   "status": "success",
-  "effects": ["heart", "wave", "flame", "stop"]
+  "effects": ["heart", "wave", "flame", "audio_loudness", "audio_frequency", "stop"]
 }
 ```
 

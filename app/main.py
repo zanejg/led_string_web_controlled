@@ -29,6 +29,7 @@ import threading
 import sys
 
 import various_effects as ve
+import audio_effects as ae
 
 
 from four_meter import LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
@@ -147,6 +148,16 @@ def control_led(led_id):
                                     ve.OUTER_FLAME_COLOUR, 
                                     ve.INNER_FLAME_COLOUR)
             start_effect('flame', flame_effect.run, stop_event)
+        case "audio_loudness":
+            print("Starting audio loudness effect...")
+            ae.clear_audio_buffer()  # Clear any pending audio data
+            loudness_controller = ae.create_loudness_controller(strip)
+            start_effect('audio_loudness', loudness_controller.run, stop_event)
+        case "audio_frequency":
+            print("Starting audio frequency effect...")
+            ae.clear_audio_buffer()  # Clear any pending audio data
+            frequency_controller = ae.create_frequency_controller(strip)
+            start_effect('audio_frequency', frequency_controller.run, stop_event)
         case "stop":
             print("Stopping all effects...")
             stop_current_effect()
@@ -176,7 +187,7 @@ def list_effects():
     """API endpoint to list available effects"""
     return jsonify({
         'status': 'success',
-        'effects': ['heart', 'wave', 'flame', 'stop']
+        'effects': ['heart', 'wave', 'flame', 'audio_loudness', 'audio_frequency', 'stop']
     })
 
 
@@ -195,6 +206,7 @@ def internal_error(error):
 def cleanup():
     """Cleanup function to stop effects and turn off LEDs when app exits."""
     stop_current_effect()
+    ae.close_audio_stream()  # Close audio stream if it was opened
     ve.set_all(strip, Color(0, 0, 0))
     print("LED strip cleaned up and turned off")
 

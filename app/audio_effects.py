@@ -7,13 +7,13 @@ import argparse
 from collections import deque
 import random
 
-from four_meter import LED_COUNT, LED_PIN, LED_FREQ_HZ
-from four_meter import LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+# from four_meter import LED_COUNT, LED_PIN, LED_FREQ_HZ
+# from four_meter import LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
 
-strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, 
-                          LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+# strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, 
+#                           LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 
-strip.begin()   
+# strip.begin()   
 
 CHUNK = 4096 #1024  # Size of a single audio chunk
 FORMAT = pyaudio.paInt16
@@ -22,17 +22,72 @@ RATE = 48000 # 16000 for video mic
 RECORD_SECONDS = 30
 USB_MIC_INDEX = 0  # **CHANGE THIS to your device's index**
 
-p = pyaudio.PyAudio()
-
-stream = p.open(format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK,
-                input_device_index=USB_MIC_INDEX)
-
-print("Listening...")
+# Global audio stream variables - initialized by init_audio_stream()
+p = None
+stream = None
 frames = []
+
+
+def init_audio_stream():
+    """Initialize the audio stream for microphone input."""
+    global p, stream, frames
+    
+    if p is None:
+        p = pyaudio.PyAudio()
+        stream = p.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK,
+                        input_device_index=USB_MIC_INDEX)
+        frames = []
+        print("Audio stream initialized and listening...")
+    else:
+        # Stream exists, clear any overflow by reading pending data
+        clear_audio_buffer()
+    
+    return stream
+
+
+def clear_audio_buffer():
+    """Clear any pending audio data in the buffer to prevent overflow."""
+    global stream
+    
+    if stream is not None and stream.is_active():
+        try:
+            # Read and discard any buffered audio data
+            available = stream.get_read_available()
+            if available > 0:
+                stream.read(available, exception_on_overflow=False)
+                print(f"Cleared {available} frames from audio buffer")
+        except Exception as e:
+            print(f"Error clearing audio buffer: {e}")
+
+
+def close_audio_stream():
+    """Close the audio stream and terminate PyAudio."""
+    global p, stream
+    
+    if stream is not None:
+        try:
+            # Give some time for any pending reads to complete
+            time.sleep(0.1)
+            stream.stop_stream()
+            stream.close()
+        except Exception as e:
+            print(f"Error closing audio stream: {e}")
+        finally:
+            stream = None
+    
+    if p is not None:
+        try:
+            p.terminate()
+        except Exception as e:
+            print(f"Error terminating PyAudio: {e}")
+        finally:
+            p = None
+    
+    print("Audio stream closed.")
 
 
 MAX_LOUDNESS = 2**15 -1  # Maximum for int16
@@ -79,14 +134,20 @@ class audio_led_connector():
         the_leds = self.pattern_function(self.stream, self.strip)
 
         for i, colour in enumerate(the_leds):
-            strip.setPixelColor(i, colour)
+            self.strip.setPixelColor(i, colour)
 
-        strip.show()
+        self.strip.show()
 
-    def run(self, duration):
-        end_time = time.time() + duration
-        while time.time() < end_time:
+    def run(self, stop_event=None):
+        """Run the audio effect continuously until stop_event is set.
+        
+        Args:
+            stop_event: threading.Event that signals when to stop the effect
+        """
+        while not (stop_event and stop_event.is_set()):
             self.update_leds()
+            # Small delay to prevent overwhelming the audio buffer
+            time.sleep(0.001)  # 1ms delay
 
 
 
@@ -132,6 +193,9 @@ class freq_audio_connector(audio_led_connector):
     """
     def __init__(self, strip, stream,
                  pattern_function ):
+        # Get LED count from the strip object
+        LED_COUNT = strip.numPixels()
+        
         # divide the frequency ranges up for each LED
         # self.freq_thresholds = [
         #     i for i in range(0,
@@ -158,8 +222,8 @@ class freq_audio_connector(audio_led_connector):
                 g = col[1] * j                 
                 b = col[2] * j 
                 self.output_colour_sequence.append(Color(r, g, b))
-        print("one")
-        print(self.output_colour_sequence[0:260])
+        print("Audio frequency effect initialized")
+        # print(self.output_colour_sequence[0:260])
 
         super().__init__(strip, stream,
                  pattern_function )
@@ -169,16 +233,24 @@ class freq_audio_connector(audio_led_connector):
         the_leds = self.pattern_function(self.stream, self.freq_thresholds, self)
 
         for i, colour in enumerate(the_leds):
-            strip.setPixelColor(i, colour)
+            self.strip.setPixelColor(i, colour)
 
-        strip.show()
+        self.strip.show()
 
 
 
 
 def audio_led_loudness_pattern(stream, strip):
     # for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-    data = stream.read(CHUNK)
+    try:
+        data = stream.read(CHUNK, exception_on_overflow=False)
+    except OSError as e:
+        # Handle stream errors gracefully (e.g., during switching)
+        print(f"Audio stream read error: {e}")
+        # Return all LEDs off
+        LED_COUNT = strip.numPixels()
+        return [Color(0, 0, 0)] * LED_COUNT
+    
     frames.append(data)
     # Process the raw 'data' here, e.g., convert to numpy array:
     audio_data = np.frombuffer(data, dtype=np.int16)
@@ -186,6 +258,7 @@ def audio_led_loudness_pattern(stream, strip):
     avg = np.mean(np.abs(audio_data))
     max = np.max(np.abs(audio_data))
 
+    LED_COUNT = strip.numPixels()
     # num_leds = int((avg / MAX_LOUDNESS) * LED_COUNT)
     num_leds = int((max / MAX_LOUDNESS) * LED_COUNT)
 
@@ -204,56 +277,18 @@ def audio_led_loudness_pattern(stream, strip):
 
 
 
-def audio_led_freq_pattern(stream, freq_thresholds):
-    data = stream.read(CHUNK)
-    audio_data = np.frombuffer(data, dtype=np.int16)
-
-    # Apply FFT
-    fft_result = np.fft.fft(audio_data)
-    fft_magnitude = np.abs(fft_result[:CHUNK//2])
-    frequencies = np.linspace(0, RATE / 2, CHUNK // 2)
-
-    peak_index = np.argmax(fft_magnitude)
-    peak_frequency = frequencies[peak_index]
-
-    # Map frequency to LED colors
-    the_leds = []
-    for idx, this_threshold in enumerate(freq_thresholds):
-        if idx ==0:
-            last_threshold = 0
-        else:
-            last_threshold = freq_thresholds[idx -1]
-
-        these_range_values = []
-        for this_freq in frequencies:
-            if this_freq > this_threshold:
-                break
-            if (this_freq > last_threshold ):
-                mag_index = np.where(frequencies == this_freq)[0][0]
-                magnitude = fft_magnitude[mag_index]
-
-                intensity_space = 255 * len(COLOUR_SEQUENCE)
-
-                intensity = int((magnitude / MAX_LOUDNESS) * intensity_space)
-                these_range_values.append(intensity)
-                
-
-        this_led_intensity = sum(these_range_values) // len(these_range_values) \
-            if len(these_range_values) >0 else 0
-
-        colour_sizes = MAX_LOUDNESS // len(COLOUR_SEQUENCE)
-        which_colour = this_led_intensity // colour_sizes
-        if which_colour >= len(COLOUR_SEQUENCE):
-            which_colour = len(COLOUR_SEQUENCE) -1
-        colour_intensity = ((this_led_intensity % colour_sizes) / colour_sizes) * 255
-        colour_array = [int(c * colour_intensity) for c in COLOUR_SEQUENCE[which_colour]]
-        the_leds.append(Color(*colour_array))
-
-    return the_leds
 
 def gem_audio_led_freq_pattern(stream, freq_thresholds, self):
     # 1. Read data (same)
-    data = stream.read(CHUNK)
+    try:
+        data = stream.read(CHUNK, exception_on_overflow=False)
+    except OSError as e:
+        # Handle stream errors gracefully (e.g., during switching)
+        print(f"Audio stream read error: {e}")
+        # Return all LEDs off
+        LED_COUNT = self.strip.numPixels()
+        return [Color(0, 0, 0)] * LED_COUNT
+    
     audio_data = np.frombuffer(data, dtype=np.int16)
 
     # 2. Apply FFT (same)
@@ -270,6 +305,7 @@ def gem_audio_led_freq_pattern(stream, freq_thresholds, self):
     # Add index 0 to the start
     index_thresholds = np.insert(index_thresholds, 0, 0)
     
+    LED_COUNT = self.strip.numPixels()
     the_leds = []
     
     # Iterate through the LED segments (frequency bins)
@@ -314,18 +350,54 @@ def gem_audio_led_freq_pattern(stream, freq_thresholds, self):
     return the_leds
 
 
+# Factory functions to create audio effect controllers
+def create_loudness_controller(strip):
+    """Create a loudness-based audio LED controller.
+    
+    Args:
+        strip: The LED strip object
+        
+    Returns:
+        audio_led_connector instance configured for loudness detection
+    """
+    # Initialize audio stream if needed
+    audio_stream = init_audio_stream()
+    
+    return audio_led_connector(strip, audio_stream, audio_led_loudness_pattern)
 
 
-loudness_contr = audio_led_connector(strip, stream,
-                             audio_led_loudness_pattern)
+def create_frequency_controller(strip):
+    """Create a frequency-based audio LED controller.
+    
+    Args:
+        strip: The LED strip object
+        
+    Returns:
+        freq_audio_connector instance configured for frequency analysis
+    """
+    # Initialize audio stream if needed
+    audio_stream = init_audio_stream()
+    
+    return freq_audio_connector(strip, audio_stream, gem_audio_led_freq_pattern)
 
-freq_contr = freq_audio_connector(strip, stream,
-                             gem_audio_led_freq_pattern)
 
-# loudness_contr.run(60)
-freq_contr.run(300)
+# Main execution block (for standalone testing)
+if __name__ == '__main__':
+    from four_meter import LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
+    
+    strip = Adafruit_NeoPixel(LED_COUNT, LED_PIN, LED_FREQ_HZ, 
+                              LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
+    strip.begin()
+    
+    # Initialize audio
+    init_audio_stream()
+    
+    loudness_contr = audio_led_connector(strip, stream, audio_led_loudness_pattern)
+    freq_contr = freq_audio_connector(strip, stream, gem_audio_led_freq_pattern)
 
-print("Finished listening.")
-stream.stop_stream()
-stream.close()
-p.terminate()
+    # Run one of the effects
+    # loudness_contr.run()
+    # freq_contr.run()
+
+    print("Finished listening.")
+    close_audio_stream()

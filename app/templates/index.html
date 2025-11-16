@@ -47,14 +47,32 @@
             
             <!-- Add your LED controls here -->
 
-            <ul>
-                <li><button class="btn btn-primary" onclick="controlLED('heart')">Heart Beat</button></li>
-                <li><button class="btn btn-primary" onclick="controlLED('wave')">Wave Effect</button></li>
-                <li><button class="btn btn-primary" onclick="controlLED('flame')">Flame Effect</button></li>
-                <li><button class="btn btn-secondary" onclick="controlLED('stop')">Stop</button></li>
-            </ul>
-            
-        </main>
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <h4>Visual Effects</h4>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-primary" onclick="controlLED('heart')">Heart Beat</button>
+                        <button class="btn btn-primary" onclick="controlLED('wave')">Wave Effect</button>
+                        <button class="btn btn-primary" onclick="controlLED('flame')">Flame Effect</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <h4>Audio-Reactive Effects</h4>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-success" onclick="controlLED('audio_loudness')">Audio Loudness</button>
+                        <button class="btn btn-success" onclick="controlLED('audio_frequency')">Audio Frequency</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <button class="btn btn-danger btn-lg" onclick="controlLED('stop')">Stop All Effects</button>
+                </div>
+            </div>        </main>
         
         <footer class="mt-5 pt-4 border-top text-center text-muted">
             <p>&copy; 2025 LED String Controller</p>

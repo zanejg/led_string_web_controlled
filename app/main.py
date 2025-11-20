@@ -13,6 +13,7 @@ API Endpoints:
 - GET  /                      - Home page
 - GET  /api/status            - Get current status and running effect
 - GET  /api/effects           - List available effects
+- GET  /api/set_color         - Set all LEDs to a solid color (param: color=#RRGGBB)
 - GET  /control_led/<effect>  - Start an effect (heart, wave, flame, stop)
 
 Usage:
@@ -50,6 +51,7 @@ effect_thread = None
 stop_event = threading.Event()
 current_effect = None
 thread_lock = threading.Lock()
+
 
 
 def stop_current_effect():
@@ -191,6 +193,39 @@ def list_effects():
     })
 
 
+@app.route('/api/set_color', methods=['GET'])
+def set_color():
+    """API endpoint to set all LEDs to a solid color"""
+    color_hex = request.args.get('color', '#000000')
+    print(f"Setting solid color: {color_hex}")
+    
+    try:
+        # Stop any running effects first
+        stop_current_effect()
+        
+        # Convert hex color to RGB
+        color_hex = color_hex.lstrip('#')
+        r = int(color_hex[0:2], 16)
+        g = int(color_hex[2:4], 16)
+        b = int(color_hex[4:6], 16)
+        
+        # Set all LEDs to the chosen color
+        color = Color(r, g, b)
+        ve.set_all(strip, color)
+        
+        return jsonify({
+            'status': 'success',
+            'color': f'#{color_hex}',
+            'rgb': {'r': r, 'g': g, 'b': b}
+        })
+    except Exception as e:
+        print(f"Error setting color: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
@@ -225,6 +260,9 @@ if __name__ == '__main__':
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
+
+    ve.colorWipe(strip, Color(255, 255, 0), 10)  # Ensure LEDs are off at start
+    ve.colorWipe(strip, Color(0, 0, 0), 10)  # Ensure LEDs are off at start
     
     # Run Flask without the reloader in debug mode to avoid process complications
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

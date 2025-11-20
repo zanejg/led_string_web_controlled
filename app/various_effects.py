@@ -239,8 +239,8 @@ def heart_beat(strip, color1, color2, stop_event=None):
 BACKCOLOUR = hexstringcolor("2EEFE2")
 INNER_FLAME_COLOUR = hexstringcolor("FFFB00")
 OUTER_FLAME_COLOUR = hexstringcolor("FF0000")
-POSITIVE_BEAT_COLOUR = hexstringcolor("FF4A00")
-NEGATIVE_BEAT_COLOUR = hexstringcolor("FF0000")
+POSITIVE_BEAT_COLOUR = hexstringcolor("FF3500")
+NEGATIVE_BEAT_COLOUR = hexstringcolor("FF1500")
 
 inner_flame_base_ht = 15
 outer_flame_base_ht = 40

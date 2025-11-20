@@ -7,6 +7,10 @@ import argparse
 from collections import deque
 import random
 
+from collections import deque
+
+
+
 # from four_meter import LED_COUNT, LED_PIN, LED_FREQ_HZ
 # from four_meter import LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL
 
@@ -90,7 +94,7 @@ def close_audio_stream():
     print("Audio stream closed.")
 
 
-MAX_LOUDNESS = 2**15 -1  # Maximum for int16
+MAX_LOUDNESS = 2**14 -1  #  15 is Maximum for int16
 back_color = Color(150,0,150) # Purple
 fore_colour = Color(200,200,0) # Yellow
 
@@ -127,11 +131,12 @@ class audio_led_connector():
                  pattern_function ):
         self.strip = strip
         self.stream = stream
+        self.max_array = deque(maxlen=100)
         self.pattern_function = pattern_function
 
     def update_leds(self):
 
-        the_leds = self.pattern_function(self.stream, self.strip)
+        the_leds = self.pattern_function(self.stream, self.strip, self)
 
         for i, colour in enumerate(the_leds):
             self.strip.setPixelColor(i, colour)
@@ -240,7 +245,7 @@ class freq_audio_connector(audio_led_connector):
 
 
 
-def audio_led_loudness_pattern(stream, strip):
+def audio_led_loudness_pattern(stream, strip, self):
     # for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
     try:
         data = stream.read(CHUNK, exception_on_overflow=False)
@@ -257,18 +262,30 @@ def audio_led_loudness_pattern(stream, strip):
 
     avg = np.mean(np.abs(audio_data))
     max = np.max(np.abs(audio_data))
+    self.max_array.append(max)
 
+    avmax = int(np.mean(self.max_array) * 1.3)
+
+
+    HALF_LED_COUNT = int(strip.numPixels() /2)
     LED_COUNT = strip.numPixels()
     # num_leds = int((avg / MAX_LOUDNESS) * LED_COUNT)
-    num_leds = int((max / MAX_LOUDNESS) * LED_COUNT)
+    num_leds = int((max / avmax) * HALF_LED_COUNT)
 
 
     the_leds = []
-    for i in range(LED_COUNT):
+    for i in range(HALF_LED_COUNT, 0, -1):
         if i < num_leds:
             the_leds.append(fore_colour)
         else:
             the_leds.append(back_color)
+
+    for i in range(HALF_LED_COUNT, LED_COUNT):
+        if i < num_leds:
+            the_leds.append(fore_colour)
+        else:
+            the_leds.append(back_color)
+        
 
     return the_leds
 
@@ -307,6 +324,7 @@ def gem_audio_led_freq_pattern(stream, freq_thresholds, self):
     
     LED_COUNT = self.strip.numPixels()
     the_leds = []
+    last_colour = Color(0,0,0)
     
     # Iterate through the LED segments (frequency bins)
     for idx in range(LED_COUNT):
@@ -338,12 +356,14 @@ def gem_audio_led_freq_pattern(stream, freq_thresholds, self):
 
         # 4. Color Mapping (Simplified)
         # Simplified color mapping without a complex sequence lookup
+        
         if this_led_intensity > 0:
             # Hue-based mapping (example: green for low, red for high intensity)
             #colour = Color(this_led_intensity, 255 - this_led_intensity, 0)
             colour = self.output_colour_sequence[this_led_intensity -1]
+            last_colour = colour
         else:
-            colour = Color(0, 0, 0)
+            colour = last_colour
             
         the_leds.append(colour)
 
